@@ -1,0 +1,55 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reconstruct source
+        shell: pwsh
+        run: |
+          $parts = Get-ChildItem build\payload.part.* | Sort-Object Name
+          $b64 = ($parts | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          [IO.File]::WriteAllBytes('project.zip', [Convert]::FromBase64String($b64))
+          Expand-Archive -Path project.zip -DestinationPath project -Force
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        shell: pwsh
+        working-directory: project
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install pyinstaller
+
+      - name: Run tests
+        shell: pwsh
+        working-directory: project
+        run: |
+          $env:PYTHONPATH = "src"
+          pytest -q
+
+      - name: Build executable
+        shell: pwsh
+        working-directory: project
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name "Controle de Contas v39" --paths src --add-data "data;data" main.py
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: Controle-de-Contas-v39
+          path: project/dist/Controle de Contas v39.exe
+          if-no-files-found: error
