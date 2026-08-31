@@ -1,0 +1,101 @@
+name: Build v44 from approved v43 - logo only
+
+on:
+  push:
+    paths:
+      - '.github/workflows/build-v44-v43-logo-only.yml'
+      - 'build/v43_logo_only_patch.py'
+      - 'build/assets/cc_logo_mesclado.png'
+  workflow_dispatch:
+
+jobs:
+  build-v44:
+    runs-on: windows-2022
+    steps:
+      - name: Checkout repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct exact approved v43 base
+        shell: pwsh
+        run: |
+          $base = 'b2be2f045b887e2ee1f1ea4555daab7c688748b1'
+          New-Item -ItemType Directory -Force -Path _approved | Out-Null
+          $chunks = @()
+          foreach ($i in 0..4) {
+            $name = ('build/payload.part.{0:D2}' -f $i)
+            $chunks += (git show "$base`:$name")
+          }
+          $b64 = ($chunks -join '')
+          [IO.File]::WriteAllBytes('project.zip', [Convert]::FromBase64String($b64))
+          Expand-Archive -Path project.zip -DestinationPath project -Force
+          git show "$base`:build/v41_patch.py" | Set-Content _approved/v41_patch.py -Encoding utf8NoBOM
+          git show "$base`:build/v42_patch.py" | Set-Content _approved/v42_patch.py -Encoding utf8NoBOM
+          git show "$base`:build/v43_patch.py" | Set-Content _approved/v43_patch.py -Encoding utf8NoBOM
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        working-directory: project
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install pyinstaller pillow
+
+      - name: Apply approved v41-v43 and logo-only patch
+        working-directory: project
+        shell: pwsh
+        run: |
+          python ..\_approved\v41_patch.py
+          python ..\_approved\v42_patch.py
+          python ..\_approved\v43_patch.py
+          python ..\build\v43_logo_only_patch.py
+
+      - name: Validate only requested login change
+        working-directory: project
+        shell: pwsh
+        run: |
+          python -m py_compile src\controle_contas\app.py
+          python - <<'PY'
+          from pathlib import Path
+          t = Path('src/controle_contas/app.py').read_text(encoding='utf-8')
+          assert 'Faça seu Login' in t or 'FaÃ§a seu Login' in t, 'Titulo da v43 foi alterado'
+          assert "data/cc_logo_mesclado.png" in t, 'Novo logo nao foi aplicado'
+          assert Path('data/cc_logo_mesclado.png').exists(), 'Asset do novo logo ausente'
+          assert "2026 | Desenvolvido por Erick" not in t, 'Rodape removido na v43 reapareceu'
+          print('Validated: v43 preserved; only login CC replaced')
+          PY
+
+      - name: Run tests
+        working-directory: project
+        shell: pwsh
+        run: pytest -q
+
+      - name: Build executable
+        working-directory: project
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name "Controle de Contas v44" --icon "data/cc_logo.ico" --paths src --add-data "data;data" main.py
+
+      - name: Validate executable package
+        working-directory: project
+        shell: pwsh
+        run: |
+          $exe = 'dist\Controle de Contas v44.exe'
+          if (!(Test-Path $exe)) { throw 'Executavel nao gerado' }
+          $size = (Get-Item $exe).Length
+          if ($size -lt 90000000) { throw "Executavel incompleto: $size bytes" }
+          Get-FileHash $exe -Algorithm SHA256
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: Controle-de-Contas-v44-v43-logo-only
+          path: project/dist/Controle de Contas v44.exe
+          if-no-files-found: error
