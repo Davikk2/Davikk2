@@ -35,14 +35,14 @@ def patch_button(block_start, block_end, origin):
 patch_button('    def show_contas(self):', '    def show_conference(self):', 'contas')
 patch_button('    def show_conference(self):', '    def change_comp(self):', 'conference')
 
-# Substitui integralmente o metodo add_files ate o proximo metodo, independente
-# de ele estar em uma ou varias linhas no fonte reconstruido.
+# Substitui integralmente o metodo add_files. A string RAW preserva os \n como
+# escapes no codigo gerado, em vez de inserir quebras de linha dentro de f-strings.
 start = text.find('    def add_files(')
 end = text.find('    def reprocess_folder(', start)
 if start < 0 or end < 0:
     raise RuntimeError('Bloco add_files/reprocess_folder nao encontrado')
 
-new_method = '''    def add_files(self, origin='conference'):
+new_method = r'''    def add_files(self, origin='conference'):
         paths=[Path(x) for x in filedialog.askopenfilenames(title='Adicionar faturas',filetypes=[('PDF','*.pdf')])]
         if not paths:return
         try:
@@ -62,7 +62,6 @@ new_method = '''    def add_files(self, origin='conference'):
             messagebox.showwarning('Processamento concluído com erros',msg)
         else:
             messagebox.showinfo('Processamento',msg)
-        # Contas permanece em Contas e recarrega a tabela imediatamente.
         if origin=='contas':
             self.show_contas()
         else:
@@ -71,4 +70,4 @@ new_method = '''    def add_files(self, origin='conference'):
 text = text[:start] + new_method + text[end:]
 
 app.write_text(text, encoding='utf-8')
-print('v43/v44 patch applied: login visual + robust attachment processing fix')
+print('v44 patch applied: attachment processing fixed and source remains valid')
