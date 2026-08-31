@@ -1,0 +1,101 @@
+name: Build v45 from Approved v43
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-v45:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct exact approved v43 base
+        shell: pwsh
+        run: |
+          $base = 'b2be2f045b887e2ee1f1ea4555daab7c688748b1'
+          New-Item -ItemType Directory -Force -Path _approved | Out-Null
+          $chunks = @()
+          foreach ($i in 0..4) {
+            $name = ('build/payload.part.{0:D2}' -f $i)
+            $chunks += (git show "$base`:$name")
+          }
+          $b64 = ($chunks -join '')
+          [IO.File]::WriteAllBytes('project.zip', [Convert]::FromBase64String($b64))
+          Expand-Archive -Path project.zip -DestinationPath project -Force
+          git show "$base`:build/v41_patch.py" | Set-Content _approved/v41_patch.py -Encoding utf8NoBOM
+          git show "$base`:build/v42_patch.py" | Set-Content _approved/v42_patch.py -Encoding utf8NoBOM
+          git show "$base`:build/v43_patch.py" | Set-Content _approved/v43_patch.py -Encoding utf8NoBOM
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        shell: pwsh
+        working-directory: project
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install pyinstaller pillow
+
+      - name: Restore approved v43 and apply only requested login changes
+        shell: pwsh
+        working-directory: project
+        run: |
+          python ..\_approved\v41_patch.py
+          python ..\_approved\v42_patch.py
+          python ..\_approved\v43_patch.py
+          Copy-Item ..\build\assets\cc_logo_user.png data\cc_logo_user.png -Force
+          python ..\build\v45_login_logo_patch.py
+
+      - name: Validate login changes
+        shell: pwsh
+        working-directory: project
+        run: |
+          python -m py_compile src\controle_contas\app.py
+          $src = Get-Content src\controle_contas\app.py -Raw
+          if ($src.Contains('Faça seu Login') -or $src.Contains('FaÃ§a seu Login')) { throw 'Headline antiga ainda presente' }
+          if (-not $src.Contains("resource('data/cc_logo_user.png')")) { throw 'Novo asset CC nao esta ligado ao login' }
+          if (-not (Test-Path 'data\cc_logo_user.png')) { throw 'Asset CC nao foi copiado para data' }
+          $hash = (Get-FileHash 'data\cc_logo_user.png' -Algorithm SHA256).Hash.ToLower()
+          Write-Host "CC asset SHA256: $hash"
+          if ($hash -ne 'e872755360857a8d533403c2693dcbf7418adfba1d9dbc674eaaf9738a3d4046') { throw 'Asset CC divergente do preparado a partir da imagem do usuario' }
+          if (-not $src.Contains("gradient=((11,108,126,255),(88,197,190,255))")) { throw 'Botao Entrar da v43 foi alterado' }
+          if ($src.Contains('Desenvolvido por Erick')) { throw 'Rodape removido na v43 reapareceu' }
+
+      - name: Run tests
+        shell: pwsh
+        working-directory: project
+        run: |
+          $env:PYTHONPATH = 'src'
+          pytest -q
+
+      - name: Build executable
+        shell: pwsh
+        working-directory: project
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name "Controle de Contas v45" --icon "data/cc_logo.ico" --paths src --add-data "data;data" main.py
+
+      - name: Validate executable
+        shell: pwsh
+        working-directory: project
+        run: |
+          $exe = Get-Item 'dist\Controle de Contas v45.exe'
+          Write-Host "Executable bytes: $($exe.Length)"
+          if ($exe.Length -lt 100MB) { throw 'Executavel incompleto: tamanho abaixo do esperado' }
+          $exeHash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToLower()
+          Write-Host "Executable SHA256: $exeHash"
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: Controle-de-Contas-v45
+          path: project/dist/Controle de Contas v45.exe
+          if-no-files-found: error
