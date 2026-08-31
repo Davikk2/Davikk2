@@ -42,6 +42,14 @@ jobs:
           python ..\build\v42_patch.py
           python ..\build\v43_patch.py
 
+      - name: Validate application source
+        shell: pwsh
+        working-directory: project
+        run: |
+          $env:PYTHONPATH = "src"
+          python -m py_compile src\controle_contas\app.py
+          python -c "import controle_contas.app, controle_contas.service, controle_contas.parser; print('Application imports OK')"
+
       - name: Run tests
         shell: pwsh
         working-directory: project
@@ -54,6 +62,16 @@ jobs:
         working-directory: project
         run: |
           pyinstaller --noconfirm --clean --onefile --windowed --name "Controle de Contas v44" --icon "data/cc_logo.ico" --paths src --add-data "data;data" main.py
+
+      - name: Validate executable package
+        shell: pwsh
+        working-directory: project
+        run: |
+          $exe = Get-Item "dist\Controle de Contas v44.exe"
+          Write-Host "Executable size: $($exe.Length) bytes"
+          if ($exe.Length -lt 80000000) {
+            throw "Executable is unexpectedly small; OCR/PDF dependencies were not packaged."
+          }
 
       - name: Upload executable
         uses: actions/upload-artifact@v4
