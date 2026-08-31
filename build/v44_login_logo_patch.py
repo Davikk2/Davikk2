@@ -5,7 +5,7 @@ text = app.read_text(encoding='utf-8')
 
 # v44 parte EXATAMENTE da v43 aprovada e altera somente a tela de login:
 # 1) substitui o monograma antigo pelo CC interligado da referencia do usuario;
-# 2) remove "Faça seu Login" mantendo o restante do formulario na mesma posicao.
+# 2) remove o titulo do login mantendo o restante do formulario na mesma posicao.
 
 render_start = text.find('        def render_background(w, h):\n')
 icons_start = text.find("            icons=Image.new('RGBA',(W,H),(0,0,0,0))\n", render_start)
@@ -18,9 +18,6 @@ if img_line_pos < 0:
     raise RuntimeError('Fundo solido da v43 nao encontrado')
 img_line_end = img_line_pos + len(img_line)
 
-# O logo e desenhado em alta resolucao no mesmo canvas 2x do login. A geometria
-# usa dois aneis em C mesclados, com intersecoes escuras, reproduzindo o desenho
-# interligado da referencia enviada, sem halo e sem fundo proprio.
 logo_block = '''
 
             # CC interligado/mesclado aprovado para a tela de login.
@@ -39,7 +36,6 @@ logo_block = '''
                 md=ImageDraw.Draw(m)
                 md.ellipse((cx-r,cy-r,cx+r,cy+r),fill=255)
                 md.ellipse((cx-inner,cy-inner,cx+inner,cy+inner),fill=0)
-                # Abertura reta para a direita, como no monograma de referencia.
                 half_gap=int(r*0.355)
                 md.rectangle((cx,cy-half_gap,cx+r+stroke,cy+half_gap),fill=0)
                 return m
@@ -47,13 +43,12 @@ logo_block = '''
             left_mask=c_mask(cx1)
             right_mask=c_mask(cx2)
 
-            def gradient_layer(mask, c0, c1, vertical_bias=0.18):
+            def gradient_layer(mask, c0, c1):
                 layer=Image.new('RGBA',(W,H),(0,0,0,0))
                 ld=ImageDraw.Draw(layer)
                 x0=min(cx1,cx2)-r
                 x1=max(cx1,cx2)+r
                 span=max(1,x1-x0)
-                # Gradiente vetorial suave, renderizado no canvas 2x.
                 for x in range(max(0,x0),min(W,x1+1)):
                     t=(x-x0)/span
                     col=tuple(int(c0[i]*(1-t)+c1[i]*t) for i in range(3))
@@ -66,8 +61,6 @@ logo_block = '''
             logo_layer.alpha_composite(left_logo)
             logo_layer.alpha_composite(right_logo)
 
-            # A intersecao escura nas duas passagens e o detalhe que faz os C's
-            # parecerem realmente mesclados/interligados, e nao apenas sobrepostos.
             overlap=ImageChops.multiply(left_mask,right_mask)
             overlap_layer=Image.new('RGBA',(W,H),(0,0,0,0))
             od=ImageDraw.Draw(overlap_layer)
@@ -84,13 +77,15 @@ logo_block = '''
 '''
 text = text[:img_line_end] + logo_block + text[icons_start:]
 
-# Remove a headline e o ponto colorido. Mantem a mesma altura ocupada pelo
-# titulo na v43, para que os demais componentes nao mudem de posicao.
-old_title = """        title = tk.Frame(form, bg=RIGHT_BG)\n        title.pack(fill='x', pady=(0,26))\n        tk.Label(title, text='Faça seu Login', font=('Segoe UI', 27, 'bold'), bg=RIGHT_BG, fg=WHITE).pack(side='left')\n        tk.Label(title, text='.', font=('Segoe UI', 27, 'bold'), bg=RIGHT_BG, fg=DOT).pack(side='left')\n"""
-new_title = """        title = tk.Frame(form, bg=RIGHT_BG, height=39)\n        title.pack(fill='x', pady=(0,26))\n        title.pack_propagate(False)\n"""
-if old_title not in text:
-    raise RuntimeError('Titulo Faça seu Login nao encontrado')
-text = text.replace(old_title, new_title, 1)
+# Remove o bloco visual do titulo independentemente de acentos/codificacao,
+# preservando a mesma altura para nao deslocar os demais controles.
+form_pos = text.find('        form = tk.Frame(root, bg=RIGHT_BG)')
+title_start = text.find('        title = tk.Frame(form, bg=RIGHT_BG)', form_pos)
+rounded_start = text.find('        def rounded_entry(', title_start)
+if form_pos < 0 or title_start < 0 or rounded_start < 0:
+    raise RuntimeError('Bloco do titulo do login nao encontrado')
+new_title = """        title = tk.Frame(form, bg=RIGHT_BG, height=39)\n        title.pack(fill='x', pady=(0,26))\n        title.pack_propagate(False)\n\n"""
+text = text[:title_start] + new_title + text[rounded_start:]
 
 app.write_text(text, encoding='utf-8')
 print('v44 login patch applied: interlocked CC + login title removed')
