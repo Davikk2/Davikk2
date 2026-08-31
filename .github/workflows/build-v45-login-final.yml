@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'build/v45_login_exact_patch.py'
+      - 'build/v45_runtime_fix.py'
       - '.github/workflows/build-v45-login-final.yml'
   workflow_dispatch:
 
@@ -47,7 +48,7 @@ jobs:
           pip install -r requirements-dev.txt
           pip install pyinstaller pillow
 
-      - name: Apply approved v41-v43 and exact v45 login patch
+      - name: Apply approved v41-v43 and prepare exact logo asset
         working-directory: project
         shell: pwsh
         run: |
@@ -55,13 +56,15 @@ jobs:
           python ..\_approved\v42_patch.py
           python ..\_approved\v43_patch.py
           python ..\build\v45_login_exact_patch.py
+          Write-Host "Asset preparation exit code: $LASTEXITCODE"
+          python ..\build\v45_runtime_fix.py
 
       - name: Validate final login source
         working-directory: project
         shell: pwsh
         run: |
           python -m py_compile src\controle_contas\app.py
-          python -c "from pathlib import Path; t=Path('src/controle_contas/app.py').read_text(encoding='utf-8'); s=t[t.index('    def show_login(self):'):t.index('    def login(self):')]; assert 'seu Login' not in s; assert 'cc_logo_user.png' in s; assert 'draw_cc_logo(img, W, H)' not in s; assert Path('data/cc_logo_user.png').stat().st_size > 10000; print('LOGIN VALIDATED')"
+          python -c "from pathlib import Path; t=Path('src/controle_contas/app.py').read_text(encoding='utf-8'); s=t[t.index('    def show_login(self):'):t.index('    def login(self):')]; assert 'seu Login' not in s; assert \"Image.open(resource('data/cc_logo_user.png'))\" in s; assert 'draw_cc_logo(img, W, H)' not in s; assert 'paste_cc_logo(img, W, H)' not in s; assert Path('data/cc_logo_user.png').stat().st_size > 10000; print('LOGIN RUNTIME VALIDATED')"
 
       - name: Run tests
         working-directory: project
