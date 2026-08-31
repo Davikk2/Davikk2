@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 app = Path('src/controle_contas/app.py')
 text = app.read_text(encoding='utf-8')
@@ -77,15 +78,24 @@ logo_block = '''
 '''
 text = text[:img_line_end] + logo_block + text[icons_start:]
 
-# Remove o bloco visual do titulo independentemente de acentos/codificacao,
-# preservando a mesma altura para nao deslocar os demais controles.
-form_pos = text.find('        form = tk.Frame(root, bg=RIGHT_BG)')
-title_start = text.find('        title = tk.Frame(form, bg=RIGHT_BG)', form_pos)
-rounded_start = text.find('        def rounded_entry(', title_start)
-if form_pos < 0 or title_start < 0 or rounded_start < 0:
-    raise RuntimeError('Bloco do titulo do login nao encontrado')
-new_title = """        title = tk.Frame(form, bg=RIGHT_BG, height=39)\n        title.pack(fill='x', pady=(0,26))\n        title.pack_propagate(False)\n\n"""
-text = text[:title_start] + new_title + text[rounded_start:]
+# Remove somente o conteúdo textual do título. A label principal vira uma
+# label vazia com a mesma fonte, preservando altura e posição dos campos.
+lines = text.splitlines(keepends=True)
+out = []
+headline_replaced = False
+for line in lines:
+    if ('seu Login' in line and 'tk.Label' in line):
+        indent = line[:len(line)-len(line.lstrip())]
+        out.append(indent + "tk.Label(title, text=' ', font=('Segoe UI', 27, 'bold'), bg=RIGHT_BG, fg=RIGHT_BG).pack(side='left')\n")
+        headline_replaced = True
+        continue
+    if ('tk.Label' in line and 'title' in line and "text='.'" in line):
+        continue
+    out.append(line)
+
+if not headline_replaced:
+    raise RuntimeError('Linha do titulo do login nao encontrada')
+text = ''.join(out)
 
 app.write_text(text, encoding='utf-8')
 print('v44 login patch applied: interlocked CC + login title removed')
