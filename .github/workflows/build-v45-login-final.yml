@@ -81,7 +81,9 @@ jobs:
       - name: Run tests
         working-directory: project
         shell: pwsh
-        run: pytest -q
+        run: |
+          $env:PYTHONPATH = 'src'
+          pytest -q
 
       - name: Build executable
         working-directory: project
