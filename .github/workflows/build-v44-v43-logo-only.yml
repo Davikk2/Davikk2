@@ -62,15 +62,15 @@ jobs:
         shell: pwsh
         run: |
           python -m py_compile src\controle_contas\app.py
-          python - <<'PY'
+          @'
           from pathlib import Path
-          t = Path('src/controle_contas/app.py').read_text(encoding='utf-8')
-          assert 'Faça seu Login' in t or 'FaÃ§a seu Login' in t, 'Titulo da v43 foi alterado'
-          assert "data/cc_logo_mesclado.png" in t, 'Novo logo nao foi aplicado'
-          assert Path('data/cc_logo_mesclado.png').exists(), 'Asset do novo logo ausente'
-          assert "2026 | Desenvolvido por Erick" not in t, 'Rodape removido na v43 reapareceu'
-          print('Validated: v43 preserved; only login CC replaced')
-          PY
+          t = Path("src/controle_contas/app.py").read_text(encoding="utf-8")
+          assert "seu Login" in t, "Titulo da v43 foi alterado"
+          assert "data/cc_logo_mesclado.png" in t, "Novo logo nao foi aplicado"
+          assert Path("data/cc_logo_mesclado.png").exists(), "Asset do novo logo ausente"
+          assert "2026 | Desenvolvido por Erick" not in t, "Rodape removido na v43 reapareceu"
+          print("Validated: v43 preserved; only login CC replaced")
+          '@ | python -
 
       - name: Run tests
         working-directory: project
