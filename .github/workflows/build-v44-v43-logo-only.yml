@@ -75,7 +75,9 @@ jobs:
       - name: Run tests
         working-directory: project
         shell: pwsh
-        run: pytest -q
+        run: |
+          $env:PYTHONPATH = (Resolve-Path 'src').Path
+          pytest -q
 
       - name: Build executable
         working-directory: project
