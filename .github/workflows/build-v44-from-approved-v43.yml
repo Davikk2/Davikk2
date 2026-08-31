@@ -1,0 +1,94 @@
+name: Build v44 from Approved v43
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-v44:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct exact approved v43 base
+        shell: pwsh
+        run: |
+          $base = 'b2be2f045b887e2ee1f1ea4555daab7c688748b1'
+          New-Item -ItemType Directory -Force -Path _approved | Out-Null
+          $chunks = @()
+          foreach ($i in 0..4) {
+            $name = ('build/payload.part.{0:D2}' -f $i)
+            $chunks += (git show "$base`:$name")
+          }
+          $b64 = ($chunks -join '')
+          [IO.File]::WriteAllBytes('project.zip', [Convert]::FromBase64String($b64))
+          Expand-Archive -Path project.zip -DestinationPath project -Force
+          git show "$base`:build/v41_patch.py" | Set-Content _approved/v41_patch.py -Encoding utf8NoBOM
+          git show "$base`:build/v42_patch.py" | Set-Content _approved/v42_patch.py -Encoding utf8NoBOM
+          git show "$base`:build/v43_patch.py" | Set-Content _approved/v43_patch.py -Encoding utf8NoBOM
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        shell: pwsh
+        working-directory: project
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install pyinstaller pillow
+
+      - name: Apply approved v41-v43 patches and v44 login patch
+        shell: pwsh
+        working-directory: project
+        run: |
+          python ..\_approved\v41_patch.py
+          python ..\_approved\v42_patch.py
+          python ..\_approved\v43_patch.py
+          python ..\build\v44_login_logo_patch.py
+
+      - name: Validate patched application
+        shell: pwsh
+        working-directory: project
+        run: |
+          python -m py_compile src\controle_contas\app.py
+          $src = Get-Content src\controle_contas\app.py -Raw
+          if ($src.Contains('Faça seu Login')) { throw 'Headline ainda presente no login' }
+          if (-not $src.Contains('CC interligado/mesclado aprovado')) { throw 'Novo logo nao foi aplicado' }
+          if (-not $src.Contains("gradient=((11,108,126,255),(88,197,190,255))")) { throw 'Botao Entrar da v43 foi alterado' }
+          if ($src.Contains('Desenvolvido por Erick')) { throw 'Rodape removido na v43 reapareceu' }
+
+      - name: Run tests
+        shell: pwsh
+        working-directory: project
+        run: |
+          $env:PYTHONPATH = 'src'
+          pytest -q
+
+      - name: Build executable
+        shell: pwsh
+        working-directory: project
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name "Controle de Contas v44" --icon "data/cc_logo.ico" --paths src --add-data "data;data" main.py
+
+      - name: Validate executable size
+        shell: pwsh
+        working-directory: project
+        run: |
+          $exe = Get-Item 'dist\Controle de Contas v44.exe'
+          Write-Host "Executable bytes: $($exe.Length)"
+          if ($exe.Length -lt 100MB) { throw 'Executavel incompleto: tamanho abaixo do esperado' }
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: Controle-de-Contas-v44-approved-v43-base
+          path: project/dist/Controle de Contas v44.exe
+          if-no-files-found: error
