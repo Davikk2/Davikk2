@@ -1,0 +1,31 @@
+name: Compile v38 Attachment Fix
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'build/compile_v38_attachment_fix.py'
+      - '.github/workflows/compile-v38-attachment-fix.yml'
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Compile hotfix script
+        run: python build/compile_v38_attachment_fix.py
+
+      - name: Upload compiled script
+        uses: actions/upload-artifact@v4
+        with:
+          name: leitor-v38-attachment-fix-bin
+          path: leitor_v38_attachment_fix.bin
+          if-no-files-found: error
