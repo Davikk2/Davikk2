@@ -32,7 +32,77 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
-          pip install pyinstaller
+          pip install pyinstaller pillow
+
+      - name: Improve CC logo and Windows icon
+        shell: pwsh
+        working-directory: project
+        run: |
+          $code = @'
+          from pathlib import Path
+          from PIL import Image, ImageDraw
+
+          data = Path('data')
+          data.mkdir(exist_ok=True)
+          S = 1024
+          img = Image.new('RGBA', (S, S), (0, 0, 0, 0))
+
+          # Geometria limpa do monograma CC, sem halo ou fundo.
+          scale = 4
+          hi = Image.new('RGBA', (S*scale, S*scale), (0, 0, 0, 0))
+          d = ImageDraw.Draw(hi)
+          cx1, cx2, cy = 360*scale, 650*scale, 510*scale
+          r, stroke = 285*scale, 122*scale
+          box1 = (cx1-r, cy-r, cx1+r, cy+r)
+          box2 = (cx2-r, cy-r, cx2+r, cy+r)
+          start, end = 42, 318
+
+          def lerp(a, b, t):
+              return tuple(round(a[i]*(1-t)+b[i]*t) for i in range(3))
+
+          # Dois C's com degradê suave nas cores da referência.
+          steps = 420
+          for i in range(steps):
+              t = i/(steps-1)
+              a0 = start + (end-start)*i/steps
+              a1 = start + (end-start)*(i+1)/steps + 0.35
+              left = lerp((11, 108, 126), (30, 145, 157), t)
+              right = lerp((61, 173, 173), (88, 197, 190), t)
+              d.arc(box1, a0, a1, fill=left+(255,), width=stroke)
+              d.arc(box2, a0, a1, fill=right+(255,), width=stroke)
+
+          # Sobreposição escura, fiel ao encontro dos dois C's.
+          mask1 = Image.new('L', hi.size, 0)
+          mask2 = Image.new('L', hi.size, 0)
+          ImageDraw.Draw(mask1).arc(box1, start, end, fill=255, width=stroke)
+          ImageDraw.Draw(mask2).arc(box2, start, end, fill=255, width=stroke)
+          import PIL.ImageChops as IC
+          overlap = IC.multiply(mask1, mask2)
+          dark = Image.new('RGBA', hi.size, (41, 59, 72, 218))
+          hi.alpha_composite(Image.composite(dark, Image.new('RGBA', hi.size, (0,0,0,0)), overlap))
+
+          img = hi.resize((S, S), Image.Resampling.LANCZOS)
+          bbox = img.getbbox()
+          if bbox:
+              img = img.crop(bbox)
+          pad = 60
+          square = Image.new('RGBA', (max(img.width, img.height)+pad*2, max(img.width, img.height)+pad*2), (0,0,0,0))
+          x = (square.width-img.width)//2
+          y = (square.height-img.height)//2
+          square.alpha_composite(img, (x, y))
+          square.save(data/'cc_logo.png')
+          square.save(data/'cc_logo.ico', sizes=[(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)])
+
+          # Garante também o ícone correto na barra de título da janela.
+          app = Path('src/controle_contas/app.py')
+          text = app.read_text(encoding='utf-8')
+          marker = "super().__init__(); self.title('Controle de Contas');self.geometry('1440x860');self.minsize(1180,720);self.configure(bg=BG)"
+          if marker in text and "cc_logo.ico" not in text:
+              replacement = marker + "\n        try:\n            ico = resource('data/cc_logo.ico')\n            png = resource('data/cc_logo.png')\n            if ico.exists(): self.iconbitmap(default=str(ico))\n            if png.exists():\n                self._window_icon = tk.PhotoImage(file=str(png))\n                self.iconphoto(True, self._window_icon)\n        except Exception:\n            pass"
+              text = text.replace(marker, replacement, 1)
+              app.write_text(text, encoding='utf-8')
+          '@
+          $code | python -
 
       - name: Run tests
         shell: pwsh
@@ -45,11 +115,11 @@ jobs:
         shell: pwsh
         working-directory: project
         run: |
-          pyinstaller --noconfirm --clean --onefile --windowed --name "Controle de Contas v39" --paths src --add-data "data;data" main.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name "Controle de Contas v40" --icon "data/cc_logo.ico" --paths src --add-data "data;data" main.py
 
       - name: Upload executable
         uses: actions/upload-artifact@v4
         with:
-          name: Controle-de-Contas-v39
-          path: project/dist/Controle de Contas v39.exe
+          name: Controle-de-Contas-v40
+          path: project/dist/Controle de Contas v40.exe
           if-no-files-found: error
