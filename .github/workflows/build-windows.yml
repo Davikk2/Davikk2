@@ -39,6 +39,11 @@ jobs:
         working-directory: project
         run: python ..\build\v41_patch.py
 
+      - name: Apply v42 visual patch
+        shell: pwsh
+        working-directory: project
+        run: python ..\build\v42_patch.py
+
       - name: Run tests
         shell: pwsh
         working-directory: project
@@ -50,11 +55,11 @@ jobs:
         shell: pwsh
         working-directory: project
         run: |
-          pyinstaller --noconfirm --clean --onefile --windowed --name "Controle de Contas v41" --icon "data/cc_logo.ico" --paths src --add-data "data;data" main.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name "Controle de Contas v42" --icon "data/cc_logo.ico" --paths src --add-data "data;data" main.py
 
       - name: Upload executable
         uses: actions/upload-artifact@v4
         with:
-          name: Controle-de-Contas-v41
-          path: project/dist/Controle de Contas v41.exe
+          name: Controle-de-Contas-v42
+          path: project/dist/Controle de Contas v42.exe
           if-no-files-found: error
