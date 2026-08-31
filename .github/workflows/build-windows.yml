@@ -45,9 +45,6 @@ jobs:
           data = Path('data')
           data.mkdir(exist_ok=True)
           S = 1024
-          img = Image.new('RGBA', (S, S), (0, 0, 0, 0))
-
-          # Geometria limpa do monograma CC, sem halo ou fundo.
           scale = 4
           hi = Image.new('RGBA', (S*scale, S*scale), (0, 0, 0, 0))
           d = ImageDraw.Draw(hi)
@@ -60,7 +57,6 @@ jobs:
           def lerp(a, b, t):
               return tuple(round(a[i]*(1-t)+b[i]*t) for i in range(3))
 
-          # Dois C's com degradê suave nas cores da referência.
           steps = 420
           for i in range(steps):
               t = i/(steps-1)
@@ -71,7 +67,6 @@ jobs:
               d.arc(box1, a0, a1, fill=left+(255,), width=stroke)
               d.arc(box2, a0, a1, fill=right+(255,), width=stroke)
 
-          # Sobreposição escura, fiel ao encontro dos dois C's.
           mask1 = Image.new('L', hi.size, 0)
           mask2 = Image.new('L', hi.size, 0)
           ImageDraw.Draw(mask1).arc(box1, start, end, fill=255, width=stroke)
@@ -93,7 +88,6 @@ jobs:
           square.save(data/'cc_logo.png')
           square.save(data/'cc_logo.ico', sizes=[(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)])
 
-          # Garante também o ícone correto na barra de título da janela.
           app = Path('src/controle_contas/app.py')
           text = app.read_text(encoding='utf-8')
           marker = "super().__init__(); self.title('Controle de Contas');self.geometry('1440x860');self.minsize(1180,720);self.configure(bg=BG)"
@@ -101,6 +95,60 @@ jobs:
               replacement = marker + "\n        try:\n            ico = resource('data/cc_logo.ico')\n            png = resource('data/cc_logo.png')\n            if ico.exists(): self.iconbitmap(default=str(ico))\n            if png.exists():\n                self._window_icon = tk.PhotoImage(file=str(png))\n                self.iconphoto(True, self._window_icon)\n        except Exception:\n            pass"
               text = text.replace(marker, replacement, 1)
               app.write_text(text, encoding='utf-8')
+          '@
+          $code | python -
+
+      - name: Make login background uniform
+        shell: pwsh
+        working-directory: project
+        run: |
+          $code = @'
+          from pathlib import Path
+          p = Path('src/controle_contas/app.py')
+          text = p.read_text(encoding='utf-8')
+
+          old = '''            img=Image.new('RGBA',(W,H),(6,11,20,255))
+            d=ImageDraw.Draw(img)
+
+            top=(5,9,18,255); bottom=(7,13,24,255)
+            for y in range(H):
+                t=y/max(1,H-1)
+                c=tuple(int(top[i]*(1-t)+bottom[i]*t) for i in range(4))
+                d.line((0,y,W,y), fill=c)
+
+            overlay=Image.new('RGBA',(W,H),(0,0,0,0))
+            od=ImageDraw.Draw(overlay)
+            fade_start=int(W*0.38)
+            solid_start=int(W*0.57)
+            solid=(5,8,15)
+            for x in range(fade_start, solid_start):
+                t=(x-fade_start)/max(1, solid_start-fade_start)
+                od.line((x,0,x,H), fill=(*solid, int(255*t)))
+            od.rectangle((solid_start,0,W,H), fill=(*solid,255))
+            img=Image.alpha_composite(img, overlay)
+'''
+          new = '''            img=Image.new('RGBA',(W,H),(5,10,18,255))
+'''
+          if old in text:
+              text = text.replace(old, new, 1)
+
+          old_icons = '''            doc_icon(W*0.08,H*0.18,32*scale,18)
+            doc_icon(W*0.50,H*0.23,26*scale,14)
+            doc_icon(W*0.56,H*0.74,22*scale,12)
+'''
+          new_icons = '''            doc_icon(W*0.08,H*0.17,30*scale,16)
+            doc_icon(W*0.18,H*0.42,22*scale,10)
+            doc_icon(W*0.30,H*0.70,20*scale,9)
+            doc_icon(W*0.50,H*0.23,24*scale,12)
+            doc_icon(W*0.60,H*0.52,18*scale,9)
+            doc_icon(W*0.56,H*0.74,20*scale,10)
+            doc_icon(W*0.82,H*0.22,22*scale,10)
+            doc_icon(W*0.86,H*0.70,18*scale,8)
+'''
+          if old_icons in text:
+              text = text.replace(old_icons, new_icons, 1)
+
+          p.write_text(text, encoding='utf-8')
           '@
           $code | python -
 
@@ -115,11 +163,11 @@ jobs:
         shell: pwsh
         working-directory: project
         run: |
-          pyinstaller --noconfirm --clean --onefile --windowed --name "Controle de Contas v40" --icon "data/cc_logo.ico" --paths src --add-data "data;data" main.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name "Controle de Contas v41" --icon "data/cc_logo.ico" --paths src --add-data "data;data" main.py
 
       - name: Upload executable
         uses: actions/upload-artifact@v4
         with:
-          name: Controle-de-Contas-v40
-          path: project/dist/Controle de Contas v40.exe
+          name: Controle-de-Contas-v41
+          path: project/dist/Controle de Contas v41.exe
           if-no-files-found: error
